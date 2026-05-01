@@ -1,0 +1,180 @@
+/* FrogSense theme */
+:root {
+  --fs-bg: #0f1b12;
+  --fs-bg-soft: #182719;
+  --fs-panel: #f7f3df;
+  --fs-panel-soft: #efe7c9;
+
+  --fs-text: #1f2619;
+  --fs-text-muted: #5d624f;
+
+  --fs-green-dark: #253b17;
+  --fs-green: #5f7f24;
+  --fs-green-bright: #8eaa3a;
+  --fs-moss: #a7b85a;
+
+  --fs-gold: #d8bd69;
+  --fs-cream: #efe6c4;
+  --fs-bark: #4a3322;
+
+  --fs-border: rgba(95, 127, 36, 0.28);
+  --fs-shadow: 0 14px 32px rgba(15, 27, 18, 0.22);
+}
+
+/* Page shell */
+body {
+  background:
+    radial-gradient(circle at top left, rgba(216, 189, 105, 0.18), transparent 28rem),
+    linear-gradient(180deg, #f8f6ea 0%, #ede8d4 100%);
+  color: var(--fs-text);
+  margin: 10px;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;  
+}
+
+/* Hero / project header */
+.frogsense-hero {
+  background:
+    linear-gradient(90deg, rgba(15, 27, 18, 0.92), rgba(37, 59, 23, 0.72)),
+    url("/images/frogsense-logo.png");
+  background-size: cover;
+  background-position: center;
+  border-radius: 18px;
+  padding: clamp(2rem, 5vw, 4rem);
+  color: var(--fs-cream);
+  box-shadow: var(--fs-shadow);
+  border: 1px solid rgba(216, 189, 105, 0.25);
+}
+
+h1 {
+  color: var(--fs-green-dark);
+}
+
+.frogsense-hero .tagline {
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  color: var(--fs-gold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Content cards */
+.frogsense-card {
+  background: linear-gradient(180deg, var(--fs-panel), var(--fs-panel-soft));
+  border: 1px solid var(--fs-border);
+  border-radius: 16px;
+  padding: 1.4rem;
+  box-shadow: 0 8px 24px rgba(74, 51, 34, 0.12);
+}
+
+.frogsense-card h2,
+.frogsense-card h3 {
+  color: var(--fs-green-dark);
+  margin-top: 0;
+}
+
+.frogsense-card p {
+  color: var(--fs-text-muted);
+  line-height: 1.65;
+}
+
+/* Links */
+a {
+  color: #2f66d0;
+  text-decoration-color: rgba(47, 102, 208, 0.35);
+  text-underline-offset: 3px;
+  text-decoration: none;
+ 
+}
+
+a:hover {
+  color: var(--fs-green);
+  text-decoration-color: var(--fs-green);
+}
+
+/* Project cards, like the screenshot */
+.project-card.frogsense {
+  border: 1px solid var(--fs-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(247, 243, 223, 0.92));
+  box-shadow: 0 6px 18px rgba(15, 27, 18, 0.08);
+}
+
+.project-card.frogsense h3 {
+  color: #2f66d0;
+}
+
+.project-card.frogsense:hover {
+  transform: translateY(-2px);
+  border-color: rgba(142, 170, 58, 0.55);
+  box-shadow: 0 10px 24px rgba(15, 27, 18, 0.14);
+}
+
+/* Buttons */
+.frogsense-button {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--fs-green), var(--fs-green-dark));
+  color: var(--fs-cream);
+  border: 1px solid rgba(216, 189, 105, 0.35);
+  border-radius: 999px;
+  padding: 0.7rem 1.15rem;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(37, 59, 23, 0.22);
+}
+
+.frogsense-button:hover {
+  background: linear-gradient(135deg, var(--fs-green-bright), var(--fs-green));
+  color: #10180d;
+}
+
+/* Small accent rule */
+.frogsense-rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--fs-moss), transparent);
+  margin: 2rem 0;
+}
+
+/* Callout */
+.frogsense-callout {
+  border-left: 5px solid var(--fs-green-bright);
+  background: rgba(216, 189, 105, 0.14);
+  padding: 1rem 1.2rem;
+  border-radius: 0 12px 12px 0;
+  color: var(--fs-text);
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #333;
+  color: white;
+  padding: 10px 15px;
+  border-radius: 5px;
+  opacity: 0.9;
+}
+
+.maincard {
+	flex: 1;
+	padding-left: 10px;
+}
+
+.maingrid {
+    display: grid;
+	gap: 20px;
+	flex-wrap: wrap;
+	justify-content: center;
+	grid-template-columns: repeat(3, 1fr)
+}
+
+@media (max-width: 1500px) {
+	.maingrid {
+		grid-template-columns: repeat(2, 1fr)
+	}
+}
+
+@media (max-width: 1000px) {
+	.maingrid {
+		grid-template-columns: repeat(1, 1fr)
+	}
+}
