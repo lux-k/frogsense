@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update
+RUN apt-get install -y ffmpeg
 #RUN apt-get install -y ffmpeg libsndfile-dev build-essential cmake libedit-dev clang zlib1g-dev
 
 WORKDIR /app
