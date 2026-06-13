@@ -9,10 +9,18 @@ import uuid
 import threading
 from safedict import SafeDict
 from datetime import datetime
+from pathlib import Path
 
 CONFIG_FILE = "config.json"
 OUTPUT_FILE = "output.json"
 RECORD_DIR = "recordings"
+
+# docker envs default to /data otherwise expect a directory in path
+if Path("/.dockerenv").exists():
+    CONFIG_FILE = "/data/config.json"
+    OUTPUT_FILE = "/data/output.json"
+    RECORD_DIR = "/data/recordings"
+
 CONFIG = None
 
 STATUS = {}
@@ -341,29 +349,32 @@ def recent():
                 subj = l["subject"]
 
             signal = "?"
+            formatted = None
+            icon = None
+
             if len(l["signals"]) > 0  and "type" in l["signals"][0]:
+                formatted, icon = format_signal( l["signals"][0] )
+
                 signal = l["signals"][0]["type"]
+                if "formatter" in CONFIG["signals"][signal] and False:
+                    #{"input_raw": "Doodle crapped.", "timestamp": "2026-04-26T22:22:54.796504", "signals": [{"type": "bm", "modifiers": ["present"]}], "subject": "Doodle", "subject_raw": "Doodle"}
+                    #{"input_raw": "Doodle weighs 515 grams.", "timestamp": "2026-04-26T22:35:41.930160", "signals": [{"type": "weight", "weight": 515.0, "weight_unit": "g"}], "subject": "Doodle", "subject_raw": "Doodle", "id": "b0936ab1-d3c4-4a9e-b882-96c12440708b"}
+                    fmt_dict = l["signals"][0]
+                    
+                    icon = CONFIG["signals"][signal]["formatter"]["icon"]
+
+                    if "modifiers" in l["signals"][0]:
+                        fmt_dict["modifiers"] = ",".join(l["signals"][0]["modifiers"])
+                        
+                    fmt = CONFIG["signals"][signal]["formatter"]["message"]
+                    formatted = fmt.format_map(SafeDict(fmt_dict))
+                
 
             message = l["input_raw"]
             if "input_corrected" in l:
                 message = l["input_corrected"]
 
-            formatted = None
-            icon = None
             
-            formatted, icon = format_signal( l["signals"][0] )
-
-            if "formatter" in CONFIG["signals"][signal] and False:
-                #{"input_raw": "Doodle crapped.", "timestamp": "2026-04-26T22:22:54.796504", "signals": [{"type": "bm", "modifiers": ["present"]}], "subject": "Doodle", "subject_raw": "Doodle"}
-                #{"input_raw": "Doodle weighs 515 grams.", "timestamp": "2026-04-26T22:35:41.930160", "signals": [{"type": "weight", "weight": 515.0, "weight_unit": "g"}], "subject": "Doodle", "subject_raw": "Doodle", "id": "b0936ab1-d3c4-4a9e-b882-96c12440708b"}
-                fmt_dict = l["signals"][0]
-                icon = CONFIG["signals"][signal]["formatter"]["icon"]
-
-                if "modifiers" in l["signals"][0]:
-                    fmt_dict["modifiers"] = ",".join(l["signals"][0]["modifiers"])
-                    
-                fmt = CONFIG["signals"][signal]["formatter"]["message"]
-                formatted = fmt.format_map(SafeDict(fmt_dict))
                     
             results.append( {"id": l["id"], "timestamp": l["timestamp"][:19], "subject": subj, "signal": signal, "message": message, "formatted": formatted, "icon": icon} )
     
