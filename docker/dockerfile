@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+RUN apt-get update
+#RUN apt-get install -y ffmpeg libsndfile-dev build-essential cmake libedit-dev clang zlib1g-dev
+
+WORKDIR /app
+
+COPY ./frogsense/requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY ./frogsense/*.py /app/
+COPY ./frogsense/docker/run.sh /app/
+COPY ./frogsense/web_assets /app/web_assets
+
+RUN chmod +x /app/*.sh
+
+VOLUME ["/data"]
+
+CMD ["/app/run.sh"]
