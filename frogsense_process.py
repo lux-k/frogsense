@@ -2,7 +2,6 @@ from datetime import datetime
 import string
 import json
 import re
-import jellyfish
 
 def process(input="", cfg={}, output_file="output.json", write=True, tracking_id=None ):
     result = {"input_raw": input, "timestamp": datetime.now().isoformat(), "signals": []}
