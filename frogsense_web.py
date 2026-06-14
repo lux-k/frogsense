@@ -56,6 +56,8 @@ def default_page(content="", title = "Home"):
 
     html = f"<html><head><title>FrogSense {title}</title>"
     html += f"<link rel=\"stylesheet\" href=\"{ url_for('assets', filename='frogsense.css') }\">"
+    html += f"<link rel=\"manifest\" href=\"{ url_for('manifest') }\">"
+
     html += """
 <script>
 setTimeout(() => {{
@@ -119,7 +121,7 @@ recordBtn.onclick = async () => {
 
   } catch (err) {
     console.error("Mic error:", err);
-    alert("Microphone access failed. Are you on HTTPS?");
+    alert(`${err.name}: ${err.message}`);
   }
 
 };
@@ -201,6 +203,17 @@ async function loadRecent() {
 }
 
 loadRecent();
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register(
+"""
+    html += f"     '{request.script_root}/web_assets/sw.js'"
+    html += """
+    )
+    .then(reg => console.log('SW registered', reg))
+    .catch(err => console.error('SW registration failed', err));
+}
+
 </script>
 """    
 
@@ -473,6 +486,30 @@ def render_dashboard():
     
     return html
 
+@app.route("/manifest.json")
+def manifest():
+    return {
+        "name": "FrogSense",
+        "short_name": "FrogSense",
+        "start_url": request.script_root + "/",
+        "scope": request.script_root + "/",
+        "display": "standalone",
+        "theme_color": "#2d5a27",
+        "background_color": "#ffffff",
+        "icons": [
+            {
+                "src": request.script_root + "/web_assets/icons/android-chrome-192x192.png",
+                "sizes": "192x192",
+                "type": "image/png"
+            },
+            {
+                "src": request.script_root + "/web_assets/icons/android-chrome-512x512.png",
+                "sizes": "512x512",
+                "type": "image/png"
+            }
+        ]
+    }
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=4000)
 
