@@ -177,4 +177,8 @@ a:hover {
 	.maingrid {
 		grid-template-columns: repeat(1, 1fr)
 	}
+	body {
+		font-size: 24px;
+	}	
+
 }
