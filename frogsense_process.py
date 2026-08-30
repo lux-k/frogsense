@@ -9,10 +9,26 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from openai import OpenAI
 import markdown
+import os
 
-def process(input="", cfg={}, uid=0, subjects={}, ts=int(datetime.now(timezone.utc).timestamp()), output_file=frogsense_config.OUTPUT_FILE, write=True, id=None ):
+def get_server_tz():
+    localtime_path = '/etc/localtime'
+    if os.path.islink(localtime_path):
+        target = os.readlink(localtime_path)
+        # Target usually looks like: /usr/share/zoneinfo/America/New_York
+        if 'zoneinfo/' in target:
+            return target.split('zoneinfo/')[-1]
+    return None    
+
+def get_utc_ts():
+    return int(datetime.now(timezone.utc).timestamp())
+
+def process(input="", cfg={}, uid=0, subjects={}, ts=0, output_file=frogsense_config.OUTPUT_FILE, write=True, id=None ):
     result = {"input_raw": input, "timestamp_int": ts, "signals": [], "uid": uid}
 
+    if result["timestamp_int"] == 0:
+        result["timestamp_int"] = get_utc_ts()
+        
     # rewrites the time on updated text
     if id is not None:
         result["id"] = id
@@ -230,9 +246,9 @@ def observation_save(observation):
 
     return observation
 
-def observation_update_ts(uid=0,id=None,ts="",tz=ZoneInfo("America/New_York")):
+def observation_update_ts(uid=0,id=None,ts="",tz="America/New_York"):
         dt = datetime.fromisoformat(ts)
-        dt = dt.replace(tzinfo=tz)
+        dt = dt.replace(tzinfo=ZoneInfo(tz))
 
         db = frogsense_common.get_db()
         cur = db.cursor()
@@ -253,7 +269,7 @@ def observation_delete(uid=0,id=None):
         
         db.commit()
         
-def observation_load(uid=0,sort_ts=True,limit=None,sid=None,required_modifiers=None,signal=None,tz=ZoneInfo("America/New_York")):
+def observation_load(uid=0,sort_ts=True,limit=None,sid=None,required_modifiers=None,signal=None,tz="America/New_York"):
     db = frogsense_common.get_db()
     cur = db.cursor()
     
@@ -286,7 +302,7 @@ def observation_load(uid=0,sort_ts=True,limit=None,sid=None,required_modifiers=N
 
     rows = cur.fetchall()
     for r in rows:
-        dt = datetime.fromtimestamp(r[3], tz=tz)
+        dt = datetime.fromtimestamp(r[3], tz=ZoneInfo(tz))
         rec = {"id": r[0], "input_raw": r[1], "timestamp_int": r[3], "timestamp": dt.strftime("%Y-%m-%dT%H:%M"), "signals": json.loads(r[4]), "subject": r[7], "subject_raw": r[6], "sid": r[5]}
         if r[2] is not None:
             rec["input_corrected"] = r[2]
@@ -368,7 +384,7 @@ def ai_summary(uid, sid, question=""):
         extensions=["extra"]
     )    
     return analysis_html
-    
+
 #import_old()
 
 #test("Doodle ate 18 dubia")

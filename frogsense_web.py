@@ -17,8 +17,14 @@ CONFIG = None
 
 STATUS = {}
 
+TZ = frogsense_process.get_server_tz()
+
 def get_uid():
     return 1
+
+def get_tz():
+    global TZ
+    return TZ
 
 def load_schema():
     return frogsense_process.schema_load(uid=get_uid())
@@ -63,13 +69,16 @@ def default_page(content="", title = "Home", include=True):
     html += "</head><body>"
 
     messages = get_flashed_messages()
-  
+    html += f"<div id=\"toast\""
     if messages:
-        html += f"<div class=\"toast\" id=\"toast\">"
+        html += ">"
         for m in messages:
             html += f"{m}<br>"
-        html += "</div>"
-        html += """
+    else:
+        html += " style=\"display: none\">"
+    html += "</div>"
+
+    html += """
     <script>
     setTimeout(() => {{
         const t = document.getElementById("toast");
@@ -92,6 +101,9 @@ def default_page(content="", title = "Home", include=True):
         html += "<button type=\"submit\">Capture</button></form></ul>"
         html += "<h2>Audio</h2><ul>"
         html += "<button type=\"button\" class=\"foo\" id=\"recordBtn\">Record</button> <button type=\"button\" id=\"stopBtn\" disabled>Stop</button><br><audio id=\"playback\"></audio></ul></ul>"
+
+        #html += f"<script>const urlMap = {{foo: 'bar'}};</script>"
+
         html += """
 <script>
 let mediaRecorder;
@@ -386,7 +398,7 @@ def search():
     sid = int(request.form["sid"])
     sign = request.form["signal"]
     
-    results = frogsense_process.observation_load(uid=get_uid(),sid=sid)
+    results = frogsense_process.observation_load(uid=get_uid(),sid=sid,tz=get_tz())
     #results = frogsense_process.search(subject=subj, signal=sign)
 
     html = f"<h1>Results</h1>Searching for subject {str(sid)} and signal {sign}:<br><br>"
@@ -485,7 +497,7 @@ def observation_update():
     if field == "message":
         frogsense_process.process(input=value, uid=get_uid(), ts=None, cfg=CONFIG, subjects=frogsense_process.subject_get(uid=get_uid()), id=my_id)
     elif field == "ts":
-        frogsense_process.observation_update_ts(uid=get_uid(), id=my_id, ts=value)
+        frogsense_process.observation_update_ts(uid=get_uid(), id=my_id, ts=value, tz=get_tz())
 
     #frogsense_process.observation_save(tracking_id=my_id,new_record=frogsense_process.process(uid=get_uid(),input=input,cfg=CONFIG,write=True))
     return {"ok": True}
@@ -495,7 +507,7 @@ def observations_recent():
     global CONFIG
     results = []
     
-    src = frogsense_process.observation_load(uid=get_uid(),limit=10)
+    src = frogsense_process.observation_load(uid=get_uid(),limit=10,tz=get_tz())
     for l in src:
         if "id" in l:
             subj = "?"
@@ -549,7 +561,7 @@ def format_signal(signal):
 
 def enricher_last_present(sid=None, signal = None, required_modifiers = None):
     #res = frogsense_process.search(subject = subject, signal = signal, required_modifiers = required_modifiers, reverse = True, limit = 1)
-    res = frogsense_process.observation_load(uid=get_uid(), sid=sid, signal=signal, limit=1)
+    res = frogsense_process.observation_load(uid=get_uid(), sid=sid, signal=signal, limit=1,tz=get_tz())
     
     found_signal = None
     if res is not None and len(res) > 0:
@@ -567,7 +579,7 @@ def enricher_last_present(sid=None, signal = None, required_modifiers = None):
 
 def enricher_delta(sid=None, signal = None, field = None, required_modifiers = None):    
 #    res = frogsense_process.search(subject = subject, signal = signal, required_modifiers = required_modifiers, reverse = True, limit = 2)
-    res = frogsense_process.observation_load(uid=get_uid(), sid=sid, signal=signal, limit = 2)
+    res = frogsense_process.observation_load(uid=get_uid(), sid=sid, signal=signal, limit = 2,tz=get_tz())
 
     if res is not None and len(res) >= 2:
         quantity = res[0]["signals"][0][field] - res[1]["signals"][0][field]
@@ -597,7 +609,7 @@ def render_dashboard():
         html += f"<b>{s}</b><ul>"
         for sig in CONFIG["signals"]:
             sid = subjs["name_idx"][s]
-            res = frogsense_process.observation_load(uid=get_uid(), sid=sid, signal=sig, limit=1)
+            res = frogsense_process.observation_load(uid=get_uid(), sid=sid, signal=sig, limit=1,tz=get_tz())
 
             if res is not None and len(res) > 0:
                 formatted, icon = format_signal( res[0]["signals"][0] )
