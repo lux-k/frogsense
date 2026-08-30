@@ -225,7 +225,7 @@ async function deleteObservation(id) {
     if (!confirm("Really delete this observation?"))
         return;
 
-    const response = await fetch(`/api/observation/${id}`, {
+    const response = await fetch(`api/observation/${id}`, {
         method: "DELETE"
     });
 
