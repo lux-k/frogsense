@@ -16,6 +16,7 @@
   --fs-gold: #d8bd69;
   --fs-cream: #efe6c4;
   --fs-bark: #4a3322;
+  --fs-white: #ffffff;
 
   --fs-border: rgba(95, 127, 36, 0.28);
   --fs-shadow: 0 14px 32px rgba(15, 27, 18, 0.22);
@@ -109,17 +110,76 @@ a:hover {
 }
 
 /* Buttons */
-.frogsense-button {
+.frogsense-button, button2 {
   display: inline-block;
   background: linear-gradient(135deg, var(--fs-green), var(--fs-green-dark));
-  color: var(--fs-cream);
+  color: var(--fs-white);
   border: 1px solid rgba(216, 189, 105, 0.35);
   border-radius: 999px;
   padding: 0.7rem 1.15rem;
   font-weight: 700;
   text-decoration: none;
   box-shadow: 0 8px 18px rgba(37, 59, 23, 0.22);
+  height: 20px;
 }
+
+#recordBtn {
+    background: #2e7d32;
+}
+
+#stopBtn {
+    background: #b3261e;
+}
+
+#recordBtn:disabled,
+#stopBtn:disabled {
+    background: #999;
+    color: #ddd;
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+abbr {
+    text-decoration: none;
+}
+
+.raw-observation {
+    display: inline;
+}
+
+.raw-toggle {
+    display: none;
+}
+
+.raw-observation label {
+    cursor: pointer;
+}
+
+.raw-input {
+    display: none;
+}
+
+.raw-toggle:checked ~ .raw-input {
+    display: inline-block;
+}
+
+.button,
+button {
+  background: linear-gradient(135deg, var(--fs-green), var(--fs-green-dark));
+  color: var(--fs-white);
+  border: 1px solid var(--button-border);
+  border-radius: 999px;
+  padding: 0.75rem 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(31, 77, 22, 0.15);
+  height:20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
 
 .frogsense-button:hover {
   background: linear-gradient(135deg, var(--fs-green-bright), var(--fs-green));

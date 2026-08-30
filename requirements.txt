@@ -1,3 +1,6 @@
 flask
 faster_whisper
-safe-dict
+python-dotenv
+requests
+markdown
+openai
