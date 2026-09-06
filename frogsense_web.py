@@ -17,7 +17,7 @@ CONFIG = None
 
 STATUS = {}
 
-TZ = frogsense_process.get_server_tz()
+TZ = os.getenv("TZ", frogsense_process.get_server_tz())
 
 def get_uid():
     return 1
@@ -63,6 +63,10 @@ def default_page(content="", title = "Home", include=True):
 
     html = f"<html><head><title>FrogSense v{frogsense_config.VERSION}: {title}</title>"
     html += f"<link rel=\"stylesheet\" href=\"{ url_for('assets', filename='frogsense.css') }\">"
+#    html += f"<link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"{ url_for('assets/icons', filename='apple-touch-icon.png') }\">"
+    html += f"<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"{request.script_root}/web_assets/icons/favicon-32x32.png\">"
+    html += f"<link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"{request.script_root}/web_assets/icons/favicon-16x16.png\">"
+
     html += f"<link rel=\"manifest\" href=\"{ url_for('manifest') }\">"
 
 
@@ -327,8 +331,9 @@ def setup():
 
         if (!subjectId)
             return;
-
-        const response = await fetch(`/api/subject/${subjectId}`);
+"""
+    html += f"const response = await fetch(`{request.script_root}/api/subject/${{subjectId}}`)";
+    html += """
         const data = await response.json();
 
         document.getElementById("subject_name").value = data.name ?? "";
