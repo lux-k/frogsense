@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, request, redirect, url_for, flash, get_flashed_messages
+from flask import Flask, send_from_directory, request, redirect, url_for, flash, get_flashed_messages, send_file
 import json
 import os
 import frogsense_process
@@ -12,6 +12,9 @@ from datetime import datetime
 from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+import turtlepond.storage
+import turtlepond.html
+from werkzeug.datastructures import FileStorage
 
 CONFIG = None
 
@@ -35,6 +38,8 @@ def load_config(file=frogsense_config.SCHEMA_FILE):
 
     return cfg
 
+model = WhisperModel("base")  # or "small", "medium"
+
 CONFIG = load_schema()
 
 app = Flask(__name__)
@@ -50,10 +55,11 @@ os.makedirs(frogsense_config.RECORD_DIR, exist_ok=True)
 frogsense_common.db_setup()
 
 
-def dropdown( dictionary = {}, name = "", key = "" ):
+def dropdown( dictionary = {}, name = "", key = "", must_have=None ):
     html = f"<select name=\"{name}\">"
     for s in sorted(dictionary[key].keys()):
-        html += f"<option>{s}</option>"
+        if must_have == None or must_have in dictionary[key][s]:
+            html += f"<option>{s}</option>"
     html += "</select>"
     return html
     
@@ -63,10 +69,9 @@ def default_page(content="", title = "Home", include=True):
 
     html = f"<html><head><title>FrogSense v{frogsense_config.VERSION}: {title}</title>"
     html += f"<link rel=\"stylesheet\" href=\"{ url_for('assets', filename='frogsense.css') }\">"
-#    html += f"<link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"{ url_for('assets/icons', filename='apple-touch-icon.png') }\">"
+    html += f"<link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"{request.script_root}/web_assets/icons/apple-touch-icon.png\">"
     html += f"<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"{request.script_root}/web_assets/icons/favicon-32x32.png\">"
     html += f"<link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"{request.script_root}/web_assets/icons/favicon-16x16.png\">"
-
     html += f"<link rel=\"manifest\" href=\"{ url_for('manifest') }\">"
 
 
@@ -83,186 +88,54 @@ def default_page(content="", title = "Home", include=True):
     html += "</div>"
 
     html += """
-    <script>
-    setTimeout(() => {{
-        const t = document.getElementById("toast");
-        if (t) t.style.display = "none";
-    }}, 5000);
-    </script>    
     """
 
+    html += f"<script> const BASEURL = '{request.script_root}'; </script>"
+    html += f'<script src="{request.script_root}/web_assets/frogsense.js" defer></script>'
+    html += """
+<dialog id="attachments">
+    <h2>Observation Attachments</h2>
+    <ul><span id="attachment_observation_text"></span>
+    
+    <h3>Current attachments</h3>
+    <ul><span id="attachment_list"></span></ul>
+    <h3>Upload New</h3>
+    <form>
+    <input type="hidden" id="attachment_observation_id" name="observation_id">
+    <input type="file" id="attachment_file" capture="environment">
+    <button type="button" onclick="uploadAttachment()">Upload</button>
+    </form>
+    </ul>
+    <br><br><center>
+    <button type="button" onclick="this.closest('dialog').close()">Close</button>
+    </center>
+</dialog>
+
+ """    
+
     html +="<div style=\"width: 100%; margin-bottom: 20px; text-align: center;\">"
-    html += f"<a href=\"{ url_for('index') }\"><img style=\" border-radius: 20px;\" src=\"web_assets/frogsense_logo_small2.png\"></a></div><br>"
+    html += f"<a href=\"{ url_for('index') }\"><img style=\" border-radius: 20px;\" src=\"{request.script_root}/web_assets/frogsense_logo_small2.png\"></a></div><br>"
     html += content
 
     if include:
         html += "<div class=\"maingrid\">"
         html += "<div class=\"maincard\"><h1>Recent Observations</h1><div id=\"recent\"></div></div>"
 
-        html += f"<div class=\"maincard\"><h1>Capture Observations</h1><ul><form method=\"POST\" action=\"{ url_for('record_text') }\">"
+        html += f"<div class=\"maincard\"><h1>Capture Observations</h1><ul><form method=\"POST\" action=\"{ url_for('observation_create') }\">"
         html += "<h2>Text</h2><ul>"
-        html += "<input name=\"input\"> "
+        html += "<input type=\"hidden\" name=\"type\" value=\"text\"><input name=\"input\"> "
         html += "<button type=\"submit\">Capture</button></form></ul>"
         html += "<h2>Audio</h2><ul>"
-        html += "<button type=\"button\" class=\"foo\" id=\"recordBtn\">Record</button> <button type=\"button\" id=\"stopBtn\" disabled>Stop</button><br><audio id=\"playback\"></audio></ul></ul>"
-
-        #html += f"<script>const urlMap = {{foo: 'bar'}};</script>"
-
-        html += """
-<script>
-let mediaRecorder;
-let audioChunks = [];
-
-const recordBtn = document.getElementById("recordBtn");
-const stopBtn = document.getElementById("stopBtn");
-
-recordBtn.onclick = async () => {
-
-  try {
-     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-     console.log("Mic access granted");
-      mediaRecorder = new MediaRecorder(stream);
-      audioChunks = [];
-
-      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: "audio/webm" });
-        const audioURL = URL.createObjectURL(blob);
-        document.getElementById("playback").src = audioURL;
-
-        uploadAudio(blob);
-      };
-
-      mediaRecorder.start();
-      recordBtn.disabled = true;
-      stopBtn.disabled = false;
-
-  } catch (err) {
-    console.error("Mic error:", err);
-    alert(`${err.name}: ${err.message}`);
-  }
-
-};
-
-stopBtn.onclick = () => {
-  mediaRecorder.stop();
-  recordBtn.disabled = false;
-  stopBtn.disabled = true;
-};
-
-async function uploadAudio(blob) {
-  const formData = new FormData();
-  formData.append("audio", blob, "recording.webm");
-
-  const response = await fetch("record_audio", {
-    method: "POST",
-    body: formData
-  });
-
-  const { id } = await response.json()
-  poll(id)  
-}
-
-async function poll(id) {
-  const res = await fetch(`status/${id}`);
-  const data = await res.json();
-
-  if (data.status === "done") {
-    showToast(data.text);
-    loadRecent()
-  } else {
-    setTimeout(() => poll(id), 1000);
-  }
-}
-
-function showToast(text) {
-  const div = document.createElement("div");
-  div.className = "toast";
-  div.innerHTML = text;
-  document.body.appendChild(div);
-
-  setTimeout(() => div.remove(), 5000);
-}
-
-async function updateObservation(id, m) {
-    try {
-        const res = await fetch("observation_update", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ id: id, field: m, value: document.getElementById(id + "_" + m).value})
-            });
-        console.log(res); // Process data
-        await loadRecent();
-    } catch (error) {
-        console.error(error); // Handle errors
-    }  
-}
-
-async function loadRecent() {
-  const res = await fetch("observations_recent");
-  const data = await res.json();
-
-  const container = document.getElementById("recent");
-  container.innerHTML = "";
-
-  data.forEach(entry => {
-    const div = document.createElement("div");
-    var r = ""
-    if (entry.icon != null)
-        r += `${entry.icon} ${entry.formatted} `
-
-    div.className = "entry";
-    div.innerHTML = `
-      <div>
-    <a href="#" onclick="deleteObservation('${entry.id}')">🗑️</a> 
-    🕒 <form style="display: inline" onSubmit="updateObservation('${entry.id}', 'ts'); return false"><input onfocus="this.dataset.original=this.value" onblur="if (this.value !== this.dataset.original) this.form.requestSubmit()" style="display: inline" type="datetime-local" id="${entry.id}_ts" value="${entry.timestamp}"></form>
-      &#128211; ${entry.subject}
-      ${r}
-<span class="raw-observation">
-    <input type="checkbox" id="${entry.id}_message_cb" class="raw-toggle">
-    <label for="${entry.id}_message_cb">💬</label>
-    <form class="raw-input" id="style="display: inline" onSubmit="updateObservation('${entry.id}', 'message'); return false"><input id="${entry.id}_message" value="${entry.message}"></form>
-</span>      
-
-
-
-      
-      </div>
-    `;
-    // 
-    container.appendChild(div);
-  });
-}
-
-async function deleteObservation(id) {
-    if (!confirm("Really delete this observation?"))
-        return;
-
-    const response = await fetch(`api/observation/${id}`, {
-        method: "DELETE"
-    });
-
-    await loadRecent();
-}
-loadRecent();
-
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(
-"""
-        html += f"     '{request.script_root}/web_assets/sw.js'"
-        html += """
-    )
-    .then(reg => console.log('SW registered', reg))
-    .catch(err => console.error('SW registration failed', err));
-}
-
-</script>
-"""    
-
+        html += "<button type=\"button\" class=\"foo\" id=\"recordBtn\">Record</button> <button type=\"button\" id=\"stopBtn\" disabled>Stop</button><br><audio id=\"playback\"></audio></ul>"
+        html += "<h2>Picture</h2><ul>"
+        html += f"<form method=\"POST\" enctype=\"multipart/form-data\" action=\"{url_for('observation_create')}\"><input type=\"hidden\" name=\"type\" value=\"picture\">"
+        html += "Subject " + subject_dropdown()  + " for signal "
+        html +=  dropdown(CONFIG, "signal", "signals", "llm_prompt")  + "<br>"
+        html += "<input name=\"file\" type=\"file\" capture=\"environment\" accept=\"image/*\"><button>Upload</button>"
+        html += "</form></ul>"
+        html += "</ul>"
         html += "</div>"
+
         html += "<div class=\"maincard\">"
         html += f"<h1>Search</h1><form method=\"POST\" action=\"{ url_for('search') }\">"
         html += "Subject " + subject_dropdown() + " for "
@@ -272,11 +145,10 @@ if ('serviceWorker' in navigator) {
         html += "<div class=\"maincard\">"
         html += f"<h1>Dashboard</h1>"
         html += render_dashboard() + "</div>"
-
         html += ai_card()
 
     html += "<br><center><div style=\"width: 100%; margin-bottom: 20px;\">"
-    html += f"FrogSense by <a href=\"mailto:kevin@turtlepond.us\">Kevin Lux</a>; Settings <a href=\"setup\">&#x2699;</a>; Github <a href=\"https://github.com/lux-k/frogsense\"><img height=\"15\" width=\"15\" src=\"web_assets/github.svg\"></a>; <a href=\"https://turtlepond.us\">TurtlePond.us</a><br>"
+    html += f"FrogSense by <a href=\"mailto:kevin@turtlepond.us\">Kevin Lux</a>; Settings <a href=\"{request.script_root}/setup\">&#x2699;</a>; Github <a href=\"https://github.com/lux-k/frogsense\"><img height=\"15\" width=\"15\" src=\"{request.script_root}/web_assets/github.svg\"></a>; <a href=\"https://turtlepond.us\">TurtlePond.us</a><br>"
     html += "</div></center>"
     html += "</body></html>"
 
@@ -314,14 +186,23 @@ def setup():
     html += f"Configuration (JSON):<br><textarea cols=\"100\" rows=\"50\" name=\"config\">{ json.dumps(CONFIG, indent=4) }</textarea><br><br>"
     html += "<button type=\"submit\">Save</button>"
     html += "</form>"
-    if False:
-        html += "<h2>Add Subject</h2>"
-        html += f"<form action=\"{ url_for('subject_add') }\" method=\"POST\">"
-        html += "Name: <input name=\"name\"><br>"
-        html += f"Configuration (JSON):<br><textarea cols=\"100\" rows=\"10\" name=\"config\"></textarea><br><br>"
-        html += "<button type=\"submit\">Save</button>"
-        html += "</form>"
+    
+    backend = next(iter(frogsense_config.STORAGE_CFG))
+    values = dict(frogsense_config.STORAGE_CFG[backend])
+    values["backend"] = backend
+    html += setup_storage_form(values)
+    
+    html += setup_subjects_form()
+
+    html += "</ul>"
+    return default_page(html,include=False)
+
+
+def setup_subjects_form(values={}, errors={}):
+    global CONFIG
+    html = ""
     html += "<h2>Modify Subjects</h2>"
+    html += "<div class=\"config-form\">"
     html += f"<form action=\"{ url_for('subject_update') }\" method=\"POST\">"
     html += "Subject: " + subject_dropdown(new=True) + "<br>"
     html += """
@@ -343,11 +224,61 @@ def setup():
     html += "Name: <input id=\"subject_name\" name=\"name\"><br>"
     html += f"Configuration (JSON):<br><textarea id=\"subject_config\" cols=\"100\" rows=\"10\" name=\"config\"></textarea><br><br>"
     html += "<button type=\"submit\">Save</button>"
-    html += "</form>"
+    html += "</form></div>"
 
-    html += "</ul>"
-    return default_page(html,include=False)
+    return html
+    
+def setup_storage_form(values={}, errors={}):
+    html = ""
+    html += "<h2>Storage Setup</h2>"
+    html += "<div class=\"config-form\">"
+    html += f"<form action=\"{ url_for('storage_save') }\" method=\"POST\">"
+    
+    options = []
+    divs = ""
+    for key, value in turtlepond.storage.types().items():
+        options.append( {"name": value["name"], "value": key} )
+        divs += f"<div id=\"storage_{key}_div\">" + turtlepond.html.render_fields(turtlepond.storage.configuration(key),values,errors) + "</div>"
 
+    html += turtlepond.html.render_fields(  {           "backend": {
+                "type": "select",
+                "label": "Backend",
+                "required": True,
+                "options": options,
+                "onchange": "switchStorageBackend();"
+            }},values,errors) + divs
+
+
+    html += f'<script>function switchStorageBackend() {{ const type = document.getElementById("backend").value; document.getElementById("storage_fs_div").hidden = type !== "fs";  document.getElementById("storage_s3_div").hidden = type !== "s3" }} switchStorageBackend()</script>'
+    html += "<br><button type=\"submit\">Save</button>"
+    html += "</form></div>"
+    return html
+
+@app.route("/storage_save", methods=["POST"])
+def storage_save():
+    input_vals = request.form.to_dict()
+    
+    if request.form["backend"] == next(iter(frogsense_config.STORAGE_CFG)):
+        for name, field in turtlepond.storage.configuration(request.form["backend"]).items():
+            if (
+                field["type"] == "password"
+                and not input_vals.get(name)
+                and name in frogsense_config.STORAGE_CFG[ request.form["backend"] ]
+            ):
+                input_vals[name] = frogsense_config.STORAGE_CFG[ request.form["backend"] ][name]
+                
+    values, errors = turtlepond.html.validate_fields(fields=turtlepond.storage.configuration(request.form["backend"]), values=input_vals)
+    
+    if errors:
+        values["backend"] = input_vals["backend"]
+        return default_page(setup_storage_form(values,errors),include=False)
+    else:
+        conf = {request.form["backend"]: values}
+        flash("Configuration saved")
+        frogsense_config.save_config_value('FROGSENSE_STORAGE_CFG', json.dumps(conf))
+        frogsense_config.reload()
+        return redirect(url_for("index"))
+    
 def subject_dropdown(name="sid",id="subject_id",new=False):
     html = f"<select id=\"{id}\" name=\"{name}\">"
     if new:
@@ -359,7 +290,7 @@ def subject_dropdown(name="sid",id="subject_id",new=False):
     return html
     
 @app.route("/api/subject/<int:subject_id>")
-def get_subject(subject_id):
+def subject_get(subject_id):
     subjs = frogsense_process.subject_get(uid=get_uid())
 
     if subject_id in subjs["id"]:
@@ -367,29 +298,66 @@ def get_subject(subject_id):
     else:
         return {}
 
-
-@app.route("/api/observation/<oid>", methods=["DELETE"])
-def delete_observation(oid):
-    # verify ownership, then delete
-    frogsense_process.observation_delete(uid=get_uid(),id=oid)
-
-    return "", 204
-
-@app.route("/setup_save", methods=["POST"])
-def setup_save():
-    config = request.form["config"]
-    frogsense_process.schema_save(uid=get_uid(),schema=config)
-
-    return redirect(url_for("index"))
-
 @app.route("/subject_update", methods=["POST"])
 def subject_update():
     config = request.form["config"]
     name = request.form["name"]
     sid = int(request.form["sid"])
-    frogsense_process.subject_save(uid=get_uid(),sid=sid,name=name,config=config)
-    flash('Updated subjects')
+    try:
+        json.loads(config)
+    except Exception as e:
+        flash('Bad JSON')
+    else:
+        frogsense_process.subject_save(uid=get_uid(),sid=sid,name=name,config=config)
+        flash('Updated subjects')
     return redirect(url_for("setup"))
+
+@app.route("/api/observation/<oid>/attachments", methods=["POST"])
+def attachment_add(oid):
+    file = request.files["file"]
+
+    frogsense_process.attachment_add(uid=get_uid(),oid=oid, file=file)
+
+    return "", 204
+
+@app.route("/api/observation/<oid>/attachments", methods=["GET"])
+def attachment_list(oid):
+    return frogsense_process.attachment_list(uid=get_uid(),oid=oid)
+
+@app.route("/api/observation/<oid>/attachment/<aid>", methods=["GET"])
+def attachment_get(oid, aid):
+    attachment = frogsense_process.attachment_get(uid=get_uid(),oid=oid,aid=aid)
+    
+    stream = frogsense_config.STORAGE.open(frogsense_process.attachment_path(aid))
+
+    return send_file(
+        stream,
+        mimetype=attachment["mime_type"],
+        download_name=attachment["name"]
+    )
+    
+    return frogsense_process.attachment_list(uid=get_uid(),oid=oid)
+
+@app.route("/api/observation/<oid>/attachment/<aid>", methods=["DELETE"])
+def attachment_delete(oid, aid):
+    attachment = frogsense_process.attachment_delete(uid=get_uid(),oid=oid,aid=aid)
+    return "", 410
+    
+
+@app.route("/setup_save", methods=["POST"])
+def setup_save():
+    config = request.form["config"]
+    try:
+        json.loads(config)
+    except Exception as e:
+        flash("Bad JSON")
+    else:
+        flash("Config saved")
+        frogsense_process.schema_save(uid=get_uid(),schema=config)
+
+    return redirect(url_for("setup"))
+
+
 
 @app.route("/record_text", methods=["POST"])
 def record_text():
@@ -408,7 +376,7 @@ def search():
 
     html = f"<h1>Results</h1>Searching for subject {str(sid)} and signal {sign}:<br><br>"
     for l in results:
-        if  "type" in l["signals"][0] and l["signals"][0]["type"] == sign:
+        if  "signals" in l and l["signals"] is not None and len(l["signals"]) > 0 and "type" in l["signals"][0] and l["signals"][0]["type"] == sign:
             html += l["timestamp"] + ": " + l["subject"] + " " + format_signal( l["signals"][0] )[0] + " (Original message: " + l["input_raw"] + ")<br>"
 
     return default_page(html)
@@ -443,8 +411,6 @@ def format_response( signal ):
 def assets(filename):
     return send_from_directory("web_assets", filename)
 
-model = WhisperModel("base")  # or "small", "medium"
-
 def transcribe(path):
     segments, _ = model.transcribe(path)
     text = (" ".join([seg.text for seg in segments])).lstrip()
@@ -465,49 +431,77 @@ def process_audio(my_id, tmp_file, wav_file):
     
     text = transcribe(wav_file)
     resp = frogsense_process.process(input=text, uid=get_uid(), cfg=CONFIG, subjects=frogsense_process.subject_get(uid=get_uid()))
-    #resp = frogsense_process.process(input=text, cfg=CONFIG, tracking_id=my_id)
-    
+    if "id" in resp:
+        frogsense_process.attachment_add(uid=get_uid(),oid=resp["id"],file=FileStorage(stream=open(wav_file, "rb"),
+                        filename="audio.wav",
+                        content_type="audio/wave"))
+
+    frogsense_common.delete_file(wav_file)
+
     if len(resp["signals"]) == 1 and "type" in resp["signals"][0]:
         STATUS[my_id] = {"status": "done", "text": f"; {text}<br>&#129504; Signal " + resp["signals"][0]["type"]}
     else:
         STATUS[my_id] = {"status": "done", "text": f"&#128066; {text}"}
 
-@app.route("/record_audio", methods=["POST"])
-def record_audio():
+@app.route("/api/observation", methods=["POST"])
+def observation_create():
+    global CONFIG
     global STATUS
-    
-    file = request.files["audio"]
-    
-    my_id = str(uuid.uuid4())
-    tmp_file = "/tmp/" + my_id
-    file.save(tmp_file)
-    
-    wav_file = os.path.join(frogsense_config.RECORD_DIR, my_id + ".wav")
-    
-    STATUS[my_id] = {"status": "processing"}
-    
-    proc = threading.Thread(target=process_audio, args=(my_id, tmp_file, wav_file), daemon=True)
-    proc.start()
-    return {"id": my_id, "status": "processing"}
 
-@app.route("/observation_update", methods=["POST"])
-def observation_update():
+    type = request.form["type"]
+
+    if type == "picture":
+        file = request.files["file"]
+        sid = request.form["sid"]
+        signal = request.form["signal"]
+
+        if frogsense_process.observation_from_picture(uid=get_uid,sid=sid,signal=signal,cfg=CONFIG,picture=file):
+            return default_page("Your picture was recorded.")
+        else:
+            return default_page("Your picture couldn't be understood.")
+    elif type == "text":
+        input = request.form["input"]
+        frogsense_process.process(input=input, uid=get_uid(), cfg=CONFIG, subjects=frogsense_process.subject_get(uid=get_uid()))
+        return default_page("Your message was recorded.")        
+    elif type == "audio":
+        file = request.files["audio"]
+        
+        my_id = str(uuid.uuid4())
+        tmp_file = "/tmp/" + my_id
+        file.save(tmp_file)
+        
+        wav_file = os.path.join(frogsense_config.RECORD_DIR, my_id + ".wav")
+        
+        STATUS[my_id] = {"status": "processing"}
+        
+        proc = threading.Thread(target=process_audio, args=(my_id, tmp_file, wav_file), daemon=True)
+        proc.start()
+        return {"id": my_id, "status": "processing"}        
+
+@app.route("/api/observation/<oid>", methods=["DELETE"])
+def observation_delete(oid):
+    # verify ownership, then delete
+    frogsense_process.observation_delete(uid=get_uid(),id=oid)
+
+    return "", 204
+
+@app.route("/api/observation/<oid>", methods=["PATCH"])
+def observation_update(oid):
     data = request.get_json()
     global CONFIG
  
     value = data["value"]
     field = data["field"]
-    my_id = data["id"]
+    my_id = oid
     
     if field == "message":
         frogsense_process.process(input=value, uid=get_uid(), ts=None, cfg=CONFIG, subjects=frogsense_process.subject_get(uid=get_uid()), id=my_id)
     elif field == "ts":
         frogsense_process.observation_update_ts(uid=get_uid(), id=my_id, ts=value, tz=get_tz())
 
-    #frogsense_process.observation_save(tracking_id=my_id,new_record=frogsense_process.process(uid=get_uid(),input=input,cfg=CONFIG,write=True))
     return {"ok": True}
 
-@app.route("/observations_recent")
+@app.route("/api/observations/recent")
 def observations_recent():
     global CONFIG
     results = []
@@ -669,11 +663,3 @@ def manifest():
     
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=4000)
-
-#process("Ricky pooped", cfg=cfg)
-#process("Doodle bot didn't shit", cfg=cfg)
-#process("Pebbles weighs 457.6 grams", cfg=cfg)
-#process("I'm not sure if Smooch pooped.", cfg=cfg)
-#process("Can't find smooch poop", cfg=cfg)
-#process("DB ate 5 roaches", cfg=cfg)
-

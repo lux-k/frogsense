@@ -203,7 +203,7 @@ button {
   color: var(--fs-text);
 }
 
-.toast {
+#toast {
   position: fixed;
   bottom: 20px;
   right: 20px;
@@ -212,6 +212,24 @@ button {
   padding: 10px 15px;
   border-radius: 5px;
   opacity: 0.9;
+}
+
+.config-form {
+    display: grid;
+	grid-template-columns: max-content minmax(200px, 1fr); 
+	gap: 6px 10px;
+    align-items: center;
+    max-width: 500px;
+}
+
+.config-form label {
+    text-align: right;
+}
+
+.config-form input,
+.config-form select {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .maincard {

@@ -4,4 +4,4 @@ python-dotenv
 requests
 markdown
 openai
-turtlepond @ git+https://github.com/lux-k/turtlepond.git@v0.1.0
+turtlepond @ git+https://github.com/lux-k/turtlepond.git@v0.1.1

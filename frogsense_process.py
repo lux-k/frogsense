@@ -10,6 +10,9 @@ from zoneinfo import ZoneInfo
 from openai import OpenAI
 import markdown
 import os
+from PIL import Image, ExifTags, ImageOps
+from io import BytesIO
+import base64
 
 def get_server_tz():
     localtime_path = '/etc/localtime'
@@ -23,7 +26,7 @@ def get_server_tz():
 def get_utc_ts():
     return int(datetime.now(timezone.utc).timestamp())
 
-def process(input="", cfg={}, uid=0, subjects={}, ts=0, output_file=frogsense_config.OUTPUT_FILE, write=True, id=None ):
+def process(input="", cfg={}, uid=0, subjects={}, ts=0, write=True, id=None ):
     result = {"input_raw": input, "timestamp_int": ts, "signals": [], "uid": uid}
 
     if result["timestamp_int"] == 0:
@@ -122,9 +125,6 @@ def process(input="", cfg={}, uid=0, subjects={}, ts=0, output_file=frogsense_co
         if len(result["signals"]) >= 1:
             break;
         
-    if False and write:
-        with open(output_file, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(result) + '\n')
     if write:
         observation_save( result )
 
@@ -260,14 +260,17 @@ def observation_update_ts(uid=0,id=None,ts="",tz="America/New_York"):
         db.commit()
 
 def observation_delete(uid=0,id=None):
-        db = frogsense_common.get_db()
-        cur = db.cursor()
+    db = frogsense_common.get_db()
+    cur = db.cursor()
 
-        sql = "delete from observations where oid = ?"
-        args = [id]
-        cur.execute(sql, args)
-        
-        db.commit()
+    for ob in attachment_list(uid=uid,oid=id)["attachments"]:
+        attachment_delete(uid=0,oid=id,aid=ob["attachment_id"])
+
+    sql = "delete from observations where oid = ?"
+    args = [id]
+    cur.execute(sql, args)
+    
+    db.commit()
         
 def observation_load(uid=0,sort_ts=True,limit=None,sid=None,required_modifiers=None,signal=None,tz="America/New_York"):
     db = frogsense_common.get_db()
@@ -309,13 +312,73 @@ def observation_load(uid=0,sort_ts=True,limit=None,sid=None,required_modifiers=N
         results.append(rec)
 
     return results
+
+def attachment_list(uid=0,oid=None):
+    db = frogsense_common.get_db()
+    cur = db.cursor()
+    cur.execute("select aid, ts_int, name, length, mime_type from attachments where oid = ? order by ts_int asc", [oid])
+    rows = cur.fetchall()
     
-def test(input):
+    results = []
+    
+    for r in rows:    
+        data = {"attachment_id": r[0], "timestamp_int": r[1], "timestamp": "", "name": r[2], "length": r[3], "length_formatted": format_size(r[3]), "mime_type": r[4]}
+        results.append(data)
 
-    CONFIG = load_config()
+    res = {"attachments": results, "observation_id": oid}
+    return res
 
-    print(process(input=input,cfg=CONFIG,write=False))
+def attachment_get(uid=0,oid=None,aid=None):
+    db = frogsense_common.get_db()
+    cur = db.cursor()
 
+    cur.execute("select ts_int, name, length, mime_type from attachments where oid = ? and aid = ? ", [oid, aid])
+    rows = cur.fetchall()
+    
+    if len(rows) == 0:
+        return {}
+    
+    return {"observation_id": oid, "attachment_id": aid, "timestamp_int": rows[0][0], "timestamp": "", "name": rows[0][1], "length": rows[0][2], "mime_type": rows[0][3]}
+
+def attachment_delete(uid=0,oid=None,aid=None):
+    db = frogsense_common.get_db()
+    cur = db.cursor()
+
+    cur.execute("delete from attachments where oid = ? and aid = ? ", [oid, aid])
+
+    if frogsense_config.STORAGE.exists(attachment_path(aid)):
+        frogsense_config.STORAGE.delete(attachment_path(aid))
+
+    db.commit()
+
+def attachment_path(aid):
+    path = "attachments/" + aid[-3:] + "/" + aid
+    return path
+
+def attachment_add(uid=0,oid=None,file=None):
+    if file is None:
+        return
+
+    db = frogsense_common.get_db()
+    cur = db.cursor()
+
+    aid = str(uuid.uuid4())
+    
+    #this is first.. so if this fails the record isn't written to the db
+    frogsense_config.STORAGE.put_stream(key=attachment_path(aid), source=file.stream)
+    size = frogsense_config.STORAGE.size(key=attachment_path(aid))
+    
+    cur.execute("insert into attachments (oid, aid, ts_int, name, length, mime_type) values (?,?,?,?,?,?)",
+        [oid, aid, get_utc_ts(), file.filename, size, file.mimetype])
+    
+    db.commit()
+
+def format_size(size):
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1000 or unit == "TB":
+            return f"{size:.1f} {unit}"
+        size /= 1000
+        
 def import_old(file="/storage/turtlevid/archie/output.json"):
     rows = load_all(data_file=file)
     
@@ -331,13 +394,73 @@ def import_old(file="/storage/turtlevid/archie/output.json"):
         r["timestamp_int"] = int(dt.timestamp())
         del r["timestamp"]
         del r["id"]
-        
+
         r["sid"] = subjs["name_idx"][r["subject"]]
         
         observation_save(r)
         
     if False:
         ts = "2026-07-26T14:49:10.359738"
+
+def observation_from_picture(uid=0,sid=0,signal=None,cfg={},picture=b""):
+    if "llm_prompt" not in cfg["signals"][signal]:
+        return False
+    else:
+        resized = resize_for_llm(picture)
+        result = ai_observe_picture(picture=resized, prompt=cfg["signals"][signal]["llm_prompt"])
+        if len(result) > 0:
+            # LLM populated the data
+            result["type"] = signal
+            observation = {"input_raw": "LLM annotated picture", "timestamp_int": get_utc_ts(), "signals": [result],"sid": sid, "subject_raw": None}
+            #update to get new uuid
+            observation = observation_save(observation)
+            #now save the original picture
+            picture.seek(0)
+            attachment_add(uid=uid,oid=observation["id"],file=picture)
+            return True
+
+    return False
+
+def ai_observe_picture(picture=b"", prompt=""):
+    client = OpenAI()
+
+    image_b64 = base64.b64encode(picture.read()).decode("ascii")
+
+    response = client.responses.create(
+        model="gpt-5.6-luna",
+        input=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": f"Look at the attached image. {prompt}"
+                },
+                {
+                    "type": "input_image",
+                    "image_url": f"data:image/jpeg;base64,{image_b64}",
+                },
+            ],
+        }],
+    )    
+
+    print("AI said:", response.output_text)
+    return json.loads(response.output_text)
+
+def resize_for_llm(source, max_dimension=1600):
+    image = Image.open(source)
+    image = ImageOps.exif_transpose(image)
+    image = image.convert("RGB")
+    image.thumbnail(
+        (max_dimension, max_dimension),
+        Image.Resampling.LANCZOS
+    )
+
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=85)
+    output.seek(0)
+    source.seek(0)
+
+    return output
 
 def ai_summary(uid, sid, question=""):
     subjs = subject_get(uid=uid, sid=sid)
@@ -347,8 +470,6 @@ def ai_summary(uid, sid, question=""):
         "subject": subjs["id"][sid],
         "observations": observation_load(uid=uid,sid=sid,limit=100)
     }
-
-    #print(payload)
 
     q = "Identify meaningful patterns, trends, changes, and notable events."
     if len(question) > 0:

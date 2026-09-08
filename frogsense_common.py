@@ -80,6 +80,17 @@ def db_setup():
     )
     """)
 
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS attachments (
+        aid TEXT PRIMARY KEY,
+        oid TEXT,
+        ts_int INTEGER,
+        name TEXT,
+        length INTEGER,
+        mime_type text
+    )
+    """)
+
 #    ensure_column(CONN, "detections", "labeled", "TEXT")
     
     CONN.commit()

@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv, set_key
+import json
+import turtlepond.storage
 
-VERSION = 0.01
+VERSION = 0.02
 
 load_dotenv()
 
@@ -26,16 +28,25 @@ DB_FILE = os.path.join(DATA_DIR, "observations.db")
 
 TURTLEPOND_KEY = None
 TURTLEPOND = None
+STORAGE_CFG = None
+STORAGE = None
 
 def reload():
     global TURTLEPOND_KEY
     global TURTLEPOND
+    global STORAGE_CFG
+    global STORAGE
 
     load_dotenv(CONFIG_FILE, override=True)
 
     TURTLEPOND_KEY = os.getenv("FROGSENSE_TURTLEPOND_KEY", "")
     TURTLEPOND = os.getenv("FROGSENSE_TURTLEPOND", "https://turtlepond.us/heket/device/")
-    
+    STORAGE_CFG = json.loads(os.getenv("FROGSENSE_STORAGE_CFG", '{"fs": {"root": "' + DATA_DIR + '"}}'))
+
+    backend = next(iter(STORAGE_CFG))
+    #print("Backend is", STORAGE_CFG[backend])
+    STORAGE = turtlepond.storage.create(type=backend, configuration=STORAGE_CFG[backend])
+
 reload()
 
 print("FrogSense: Ephemeral Note Distiller", VERSION)
