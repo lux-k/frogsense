@@ -41,7 +41,7 @@ def reload():
 
     TURTLEPOND_KEY = os.getenv("FROGSENSE_TURTLEPOND_KEY", "")
     TURTLEPOND = os.getenv("FROGSENSE_TURTLEPOND", "https://turtlepond.us/heket/device/")
-    STORAGE_CFG = json.loads(os.getenv("FROGSENSE_STORAGE_CFG", '{"fs": {"root": "' + DATA_DIR + '"}}'))
+    STORAGE_CFG = json.loads(os.getenv("FROGSENSE_STORAGE_CFG", '{"fs": {"base": "' + DATA_DIR + '"}}'))
 
     backend = next(iter(STORAGE_CFG))
     #print("Backend is", STORAGE_CFG[backend])
